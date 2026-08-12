@@ -6,3 +6,4 @@ pydantic
 requests
 langchain
 openai
+httpx

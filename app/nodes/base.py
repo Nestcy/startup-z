@@ -4,8 +4,7 @@ from pydantic import BaseModel, ValidationError
 import json
 import logging
 from abc import ABC, abstractmethod
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from app.services.model import ModelClient
 import os
 
 logger = logging.getLogger("startup-stress-test-agent.nodes")
@@ -27,10 +26,9 @@ class BaseNode(ABC):
     reflection_prompt_template: str
     output_model: Type[BaseModel]
 
-    def __init__(self, search_service: SearchService):
+    def __init__(self, search_service: SearchService, model_client: Optional[ModelClient] = None):
         self.search_service = search_service
-        self.model = ChatOpenAI(temperature=0, model_name=os.getenv("OPENAI_MODEL", "gpt-4o"), client=None)  # model name via env
-        # If OPENAI_API_KEY not set, ChatOpenAI will error; that's desired
+        self.model_client = model_client
         logger.debug("Initialized node %s", getattr(self, "name", "base"))
 
     async def execute(self, state: Any) -> Dict[str, Any]:
@@ -82,25 +80,27 @@ class BaseNode(ABC):
         ...
 
     async def _run_ai_with_evidence(self, context: Dict[str, Any], evidence: Any, retry: bool = False) -> Dict[str, Any]:
-        # Simplest approach: create a system + user message using prompt_template
-        system = SystemMessage(content="You are a startup analyst. Reason only from the evidence supplied. Return JSON only.")
-        human = HumanMessage(content=self.prompt_template.format(context=context, evidence=json.dumps(evidence)[:4000]))
+        if not self.model_client:
+            raise RuntimeError("No model client configured for BaseNode")
+        system_content = "You are a startup analyst. Reason only from the evidence supplied. Return JSON only."
+        human_content = self.prompt_template.format(context=context, evidence=json.dumps(evidence)[:4000])
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": human_content},
+        ]
         logger.debug("[%s] Sending prompt to model", self.name)
-        # Call model
-        resp = await self.model.apredict(messages=[system, human])
+        resp = await self.model_client.apredict(messages=messages)
         text = resp.content
-        # Ensure JSON parse
         try:
             parsed = json.loads(text)
             return parsed
         except json.JSONDecodeError:
-            # attempt to extract JSON blob
             start = text.find("{")
             end = text.rfind("}")
             if start != -1 and end != -1:
                 try:
                     return json.loads(text[start:end+1])
-                except Exception as e:
+                except Exception:
                     logger.exception("[%s] Failed to parse JSON from model", self.name)
                     raise
             else:
@@ -112,18 +112,21 @@ class BaseNode(ABC):
             return self.output_model.parse_obj(output)
         except ValidationError as e:
             logger.exception("[%s] Output validation failed", self.name)
-            # Return as-is in a wrapper or raise based on policy
             raise
 
     async def _reflect(self, context: Dict[str, Any], evidence: Any, validated_output: BaseModel) -> ReflectionResult:
-        system = SystemMessage(content="You are a startup analyst evaluating whether the previous answer was well-supported by evidence. Return JSON only.")
+        if not self.model_client:
+            raise RuntimeError("No model client configured for reflection")
+        system_content = "You are a startup analyst evaluating whether the previous answer was well-supported by evidence. Return JSON only."
         reflection_prompt = self.reflection_prompt_template.format(context=context, evidence=json.dumps(evidence)[:4000], answer=validated_output.json())
-        human = HumanMessage(content=reflection_prompt)
-        resp = await self.model.apredict(messages=[system, human])
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": reflection_prompt},
+        ]
+        resp = await self.model_client.apredict(messages=messages)
         try:
             return ReflectionResult.parse_raw(resp.content)
         except Exception:
-            # fallback: if model non-conforming, conservatively disapprove
             logger.warning("[%s] Reflection parsing failed, defaulting to disapprove", self.name)
             return ReflectionResult(approved=False, retry=False, reason="Reflection parsing failed", confidence=0.0)
 

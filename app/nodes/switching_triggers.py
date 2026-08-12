@@ -2,6 +2,7 @@ from typing import Dict, Any
 from app.nodes.base import BaseNode
 from app.models.outputs import SwitchingTriggersOutput
 from app.services.search import SearchService
+from app.services.model import ModelClient
 
 PROMPT = """Given idea: {context[idea]}.
 Evidence: {evidence}
@@ -19,6 +20,9 @@ class SwitchingTriggersNode(BaseNode):
     prompt_template = PROMPT
     reflection_prompt_template = REFLECTION_PROMPT
     output_model = SwitchingTriggersOutput
+
+    def __init__(self, search_service: SearchService, model_client: ModelClient):
+        super().__init__(search_service, model_client)
 
     def _make_search_query(self, context: Dict[str, Any]) -> str:
         return f"{context['idea']} trends drivers why users might switch 'why' 'adoption'"

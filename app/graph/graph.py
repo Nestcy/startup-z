@@ -7,6 +7,7 @@ from app.nodes.alternatives import AlternativesNode
 from app.nodes.problems import ProblemsNode
 from app.nodes.solution import SolutionNode
 from app.services.search import SearchService, get_search_service
+from app.services.model import ModelClient, get_model_client
 from app.nodes.base import BaseNode
 import logging
 from fastapi import Depends
@@ -14,16 +15,17 @@ from fastapi import Depends
 logger = logging.getLogger("startup-stress-test-agent.graph")
 
 class WorkflowGraph:
-    def __init__(self, search_service: SearchService):
+    def __init__(self, search_service: SearchService, model_client: ModelClient):
         # instantiate nodes with shared search service
         self.search_service = search_service
+        self.model_client = model_client
         self.nodes_order: List[BaseNode] = [
-            CustomerNode(search_service=search_service),
-            SwitchingTriggersNode(search_service=search_service),
-            EarlyAdoptersNode(search_service=search_service),
-            AlternativesNode(search_service=search_service),
-            ProblemsNode(search_service=search_service),
-            SolutionNode(search_service=search_service),
+            CustomerNode(search_service=search_service, model_client=model_client),
+            SwitchingTriggersNode(search_service=search_service, model_client=model_client),
+            EarlyAdoptersNode(search_service=search_service, model_client=model_client),
+            AlternativesNode(search_service=search_service, model_client=model_client),
+            ProblemsNode(search_service=search_service, model_client=model_client),
+            SolutionNode(search_service=search_service, model_client=model_client),
         ]
         # map node name to index
         self.name_to_index = {n.name: i for i, n in enumerate(self.nodes_order)}
@@ -67,5 +69,5 @@ class WorkflowGraph:
         return state
 
 # Dependency to provide a graph instance
-def get_graph(search_service: SearchService = Depends(get_search_service)) -> WorkflowGraph:
-    return WorkflowGraph(search_service=search_service)
+def get_graph(search_service: SearchService = Depends(get_search_service), model_client: ModelClient = Depends(get_model_client)) -> WorkflowGraph:
+    return WorkflowGraph(search_service=search_service, model_client=model_client)
