@@ -1,0 +1,8 @@
+# Desirability MVP
+python-dotenv
+fastapi
+uvicorn
+pydantic
+requests
+langchain
+openai
