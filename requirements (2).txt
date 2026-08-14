@@ -1,0 +1,10 @@
+# Desirability MVP
+python-dotenv
+fastapi
+uvicorn[standard]
+httpx
+langchain
+langchain-openai
+openai
+requests
+pydantic
