@@ -1,9 +1,0 @@
-# Desirability MVP
-python-dotenv
-fastapi
-uvicorn[standard]
-httpx
-langchain
-openai
-requests
-pydantic
