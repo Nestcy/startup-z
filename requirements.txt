@@ -1,9 +1,9 @@
 # Desirability MVP
 python-dotenv
 fastapi
-uvicorn
-pydantic
-requests
+uvicorn[standard]
+httpx
 langchain
 openai
-httpx
+requests
+pydantic
